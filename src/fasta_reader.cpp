@@ -1,0 +1,185 @@
+#include "btllib/fasta_reader.hpp"
+
+#include <cctype>
+#include <deque>
+#include <fstream>
+#include <memory>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include <zlib.h>
+
+namespace btllib {
+namespace {
+
+bool
+ends_with(std::string_view text, std::string_view suffix)
+{
+  return text.size() >= suffix.size() &&
+         text.substr(text.size() - suffix.size()) == suffix;
+}
+
+std::string
+extract_id(const std::string& header)
+{
+  std::istringstream iss(header);
+  std::string id;
+  iss >> id;
+  return id;
+}
+
+template<typename NextLine>
+std::vector<FastaRecord>
+read_fasta_core(NextLine&& next_line)
+{
+  std::vector<FastaRecord> records;
+
+  std::string line;
+  FastaRecord current;
+  bool have_current = false;
+
+  while (next_line(line)) {
+    if (line.empty()) {
+      continue;
+    }
+    if (line[0] == '>') {
+      if (have_current) {
+        records.push_back(std::move(current));
+        current = FastaRecord{};
+      }
+      current.id = extract_id(line.substr(1));
+      current.sequence.clear();
+      have_current = true;
+      continue;
+    }
+
+    if (!have_current) {
+      throw std::runtime_error("Invalid FASTA: sequence encountered before header");
+    }
+
+    current.sequence.reserve(current.sequence.size() + line.size());
+    for (char c : line) {
+      if (!std::isspace(static_cast<unsigned char>(c))) {
+        current.sequence.push_back(c);
+      }
+    }
+  }
+
+  if (have_current) {
+    records.push_back(std::move(current));
+  }
+
+  return records;
+}
+
+std::vector<FastaRecord>
+read_plain_fasta(const std::string& assembly_path)
+{
+  std::ifstream in(assembly_path);
+  if (!in) {
+    throw std::runtime_error("Unable to open FASTA: " + assembly_path);
+  }
+
+  return read_fasta_core([&in](std::string& line) -> bool {
+    return static_cast<bool>(std::getline(in, line));
+  });
+}
+
+std::vector<FastaRecord>
+read_gz_fasta(const std::string& assembly_path)
+{
+  gzFile raw_gz = gzopen(assembly_path.c_str(), "rb");
+  if (raw_gz == nullptr) {
+    throw std::runtime_error("Unable to open gzip FASTA: " + assembly_path);
+  }
+
+  struct GzCloser
+  {
+    void operator()(gzFile_s* f) const
+    {
+      if (f != nullptr) {
+        gzclose(reinterpret_cast<gzFile>(f));
+      }
+    }
+  };
+
+  std::unique_ptr<gzFile_s, GzCloser> gz(reinterpret_cast<gzFile_s*>(raw_gz));
+
+  constexpr int kBufSize = 1 << 16;
+  std::string carry;
+  std::deque<std::string> ready_lines;
+
+  auto fill_lines = [&]() -> bool {
+    if (!ready_lines.empty()) {
+      return true;
+    }
+
+    char buf[kBufSize];
+    int bytes = gzread(reinterpret_cast<gzFile>(gz.get()), buf, kBufSize);
+    if (bytes < 0) {
+      int errnum = 0;
+      const char* err = gzerror(reinterpret_cast<gzFile>(gz.get()), &errnum);
+      throw std::runtime_error(std::string("gzip read error: ") + (err ? err : "unknown"));
+    }
+
+    if (bytes == 0) {
+      if (!carry.empty()) {
+        ready_lines.push_back(std::move(carry));
+        carry.clear();
+      }
+      return !ready_lines.empty();
+    }
+
+    carry.append(buf, static_cast<std::size_t>(bytes));
+
+    std::size_t start = 0;
+    for (;;) {
+      std::size_t nl = carry.find('\n', start);
+      if (nl == std::string::npos) {
+        break;
+      }
+      std::string line = carry.substr(start, nl - start);
+      if (!line.empty() && line.back() == '\r') {
+        line.pop_back();
+      }
+      ready_lines.push_back(std::move(line));
+      start = nl + 1;
+    }
+
+    carry.erase(0, start);
+    return !ready_lines.empty() || bytes > 0;
+  };
+
+  auto records = read_fasta_core([&](std::string& line) -> bool {
+    while (ready_lines.empty()) {
+      if (!fill_lines()) {
+        return false;
+      }
+      if (ready_lines.empty() && gzeof(reinterpret_cast<gzFile>(gz.get())) != 0) {
+        return false;
+      }
+    }
+
+    line = std::move(ready_lines.front());
+    ready_lines.pop_front();
+    return true;
+  });
+
+  return records;
+}
+
+} // namespace
+
+std::vector<FastaRecord>
+read_fasta(const std::string& assembly_path)
+{
+  if (ends_with(assembly_path, ".gz")) {
+    return read_gz_fasta(assembly_path);
+  }
+  return read_plain_fasta(assembly_path);
+}
+
+} // namespace btllib
