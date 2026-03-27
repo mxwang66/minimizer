@@ -10,7 +10,9 @@ namespace btllib {
 struct Minimizer
 {
   uint64_t min_hash = 0;
+  uint64_t out_hash = 0;
   std::size_t pos = 0;
+  bool forward = false;
 };
 
 std::vector<Minimizer>

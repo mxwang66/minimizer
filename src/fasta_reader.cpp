@@ -1,4 +1,4 @@
-#include "btllib/fasta_reader.hpp"
+#include "fasta_reader.hpp"
 
 #include <cctype>
 #include <deque>

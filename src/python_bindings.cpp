@@ -1,5 +1,5 @@
-#include "btllib/fasta_reader.hpp"
-#include "btllib/minimizer.hpp"
+#include "fasta_reader.hpp"
+#include "minimizer.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -57,7 +57,7 @@ indexlr_impl(const std::string& assembly_path,
         throw std::runtime_error("minimizer position exceeds uint32 range");
       }
 
-      append_scalar<uint64_t>(kmers, m.min_hash);
+      append_scalar<uint64_t>(kmers, m.out_hash);
       append_scalar<uint32_t>(kmers, static_cast<uint32_t>(m.pos));
       append_scalar<uint16_t>(kmers, static_cast<uint16_t>(record_idx));
       append_scalar<uint16_t>(kmers, static_cast<uint16_t>(assembly_idx));

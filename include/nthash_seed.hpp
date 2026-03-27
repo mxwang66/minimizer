@@ -9,8 +9,8 @@
 #include <string_view>
 #include <vector>
 
-#include <btllib/hashing_internals.hpp>
-#include <btllib/status.hpp>
+#include "hashing_internals.hpp"
+#include "status.hpp"
 
 namespace btllib::hashing_internals {
 

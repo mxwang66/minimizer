@@ -1,6 +1,6 @@
-#include "btllib/minimizer.hpp"
+#include "minimizer.hpp"
 
-#include "btllib/nthash.hpp"
+#include "nthash.hpp"
 
 #include <limits>
 #include <string>
@@ -68,7 +68,10 @@ minimize_sequence(const std::string& seq, std::size_t k, std::size_t w)
   std::size_t idx = 0;
   for (btllib::NtHash nh(seq, 2, k); nh.roll(); ++idx) {
     auto& hk = hashed_kmers_buffer[idx % hashed_kmers_buffer.size()];
-    hk = Minimizer{ nh.hashes()[0], nh.get_pos() };
+    hk = Minimizer{ nh.hashes()[0],
+                    nh.hashes()[1],
+                    nh.get_pos(),
+                    nh.get_forward_hash() <= nh.get_reverse_hash() };
 
     if (idx + 1 >= w) {
       calc_minimizer(hashed_kmers_buffer,
