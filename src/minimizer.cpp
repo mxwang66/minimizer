@@ -1,19 +1,14 @@
-#include "btllib/nthash.hpp"
+#include "minimizer.hpp"
 
-#include <cstdint>
+#include "nthash.hpp"
+
 #include <limits>
 #include <string>
 #include <vector>
 
 namespace btllib {
 
-struct Minimizer
-{
-  uint64_t min_hash = 0;
-  uint64_t out_hash = 0;
-  std::size_t pos = 0;
-  bool forward = false;
-};
+namespace {
 
 inline void
 calc_minimizer(const std::vector<Minimizer>& hashed_kmers_buffer,
@@ -52,7 +47,9 @@ calc_minimizer(const std::vector<Minimizer>& hashed_kmers_buffer,
   }
 }
 
-inline std::vector<Minimizer>
+} // namespace
+
+std::vector<Minimizer>
 minimize_sequence(const std::string& seq, std::size_t k, std::size_t w)
 {
   if ((k > seq.size()) || (w > seq.size() - k + 1)) {
