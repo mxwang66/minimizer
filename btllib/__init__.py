@@ -18,6 +18,8 @@ def indexlr(
 ) -> tuple[
     bytes,
     list[tuple[str, ...]],
+    list[int],
+    list[int],
 ]:
     """Compute minimizers for all FASTA records in each assembly in order."""
 
@@ -27,14 +29,14 @@ def indexlr(
     path_strs = [
         str(Path(path)) if isinstance(path, PathLike) else str(path) for path in assembly_path
     ]
-    kmers, idx_to_id = indexlr_native(
+    kmers, idx_to_id, record_offsets, assembly_offsets = indexlr_native(
         path_strs,
         int(kmerlen),
         int(windowsize),
         [int(idx) for idx in assembly_idx],
         [bool(target) for target in is_target],
     )
-    return kmers, [tuple(ids) for ids in idx_to_id]
+    return kmers, [tuple(ids) for ids in idx_to_id], list(record_offsets), list(assembly_offsets)
 
 
 __all__ = ["indexlr"]

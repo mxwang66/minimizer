@@ -19,7 +19,12 @@ def indexlr(
     windowsize: int,
     assembly_idx: list[int],
     is_target: list[bool],
-) -> tuple[bytes, list[tuple[str, ...]]]:
+) -> tuple[
+    bytes,
+    list[tuple[str, ...]],
+    list[int],
+    list[int],
+]:
     ...
 ```
 
@@ -36,6 +41,12 @@ in exactly that order, with no struct padding.
 `assembly_path`, `assembly_idx`, and `is_target` are parallel lists. Minimizers for each
 assembly are computed and serialized exactly as before, and each assembly's bytes are appended
 to one shared output bytestring in input order.
+
+The function also returns:
+- `record_offsets`: global minimizer indices where a new FASTA record starts contributing
+  minimizers (flattened across assemblies). Records with zero minimizers are omitted.
+- `assembly_offsets`: global minimizer indices where a new assembly starts contributing
+  minimizers. Assemblies with zero minimizers are omitted.
 
 ## Conda setup (recommended)
 
@@ -91,7 +102,7 @@ KMER_DTYPE = np.dtype([
     ("is_target", np.bool_),
 ])
 
-kmers, idx_to_id = indexlr(
+kmers, idx_to_id, record_offsets, assembly_offsets = indexlr(
     assembly_path=[Path("example.fa.gz"), Path("example2.fa.gz")],
     kmerlen=31,
     windowsize=10,
@@ -100,10 +111,11 @@ kmers, idx_to_id = indexlr(
 )
 
 arr = np.frombuffer(kmers, dtype=KMER_DTYPE)
-print(arr.shape, idx_to_id)
+print(arr.shape, idx_to_id, record_offsets, assembly_offsets)
 ```
 
 ## Notes
 
 - Record IDs are emitted for every FASTA record in order for each assembly, even when a record contributes no minimizers.
 - Minimizers are serialized record-by-record, preserving record and within-record minimizer order.
+- `record_offsets` and `assembly_offsets` are minimizer-index offsets (not byte offsets). Byte offset can be computed as `offset * 17`.
