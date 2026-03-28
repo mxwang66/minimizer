@@ -10,23 +10,31 @@ from ._core import indexlr_native
 
 
 def indexlr(
-    assembly_path: Path,
+    assembly_path: list[Path],
     kmerlen: int,
     windowsize: int,
-    assembly_idx: int,
-    is_target: bool,
-) -> tuple[bytes, tuple[str, ...]]:
-    """Compute minimizers for all FASTA records in order."""
+    assembly_idx: list[int],
+    is_target: list[bool],
+) -> tuple[
+    bytes,
+    list[tuple[str, ...]],
+]:
+    """Compute minimizers for all FASTA records in each assembly in order."""
 
-    path_str = str(Path(assembly_path)) if isinstance(assembly_path, PathLike) else str(assembly_path)
+    if len(assembly_path) != len(assembly_idx) or len(assembly_path) != len(is_target):
+        raise ValueError("assembly_path, assembly_idx, and is_target must have the same length")
+
+    path_strs = [
+        str(Path(path)) if isinstance(path, PathLike) else str(path) for path in assembly_path
+    ]
     kmers, idx_to_id = indexlr_native(
-        path_str,
+        path_strs,
         int(kmerlen),
         int(windowsize),
-        int(assembly_idx),
-        bool(is_target),
+        [int(idx) for idx in assembly_idx],
+        [bool(target) for target in is_target],
     )
-    return kmers, tuple(idx_to_id)
+    return kmers, [tuple(ids) for ids in idx_to_id]
 
 
 __all__ = ["indexlr"]

@@ -14,12 +14,12 @@ It reuses the existing ntHash/minimizer code in this repo and adds:
 
 ```python
 def indexlr(
-    assembly_path: Path,
+    assembly_path: list[Path],
     kmerlen: int,
     windowsize: int,
-    assembly_idx: int,
-    is_target: bool,
-) -> tuple[bytes, tuple[str, ...]]:
+    assembly_idx: list[int],
+    is_target: list[bool],
+) -> tuple[bytes, list[tuple[str, ...]]]:
     ...
 ```
 
@@ -32,6 +32,10 @@ The returned `bytes` buffer is laid out as records of:
 - `is_target` (`bool` / 1 byte)
 
 in exactly that order, with no struct padding.
+
+`assembly_path`, `assembly_idx`, and `is_target` are parallel lists. Minimizers for each
+assembly are computed and serialized exactly as before, and each assembly's bytes are appended
+to one shared output bytestring in input order.
 
 ## Conda setup (recommended)
 
@@ -88,11 +92,11 @@ KMER_DTYPE = np.dtype([
 ])
 
 kmers, idx_to_id = indexlr(
-    assembly_path=Path("example.fa.gz"),
+    assembly_path=[Path("example.fa.gz"), Path("example2.fa.gz")],
     kmerlen=31,
     windowsize=10,
-    assembly_idx=0,
-    is_target=True,
+    assembly_idx=[0, 1],
+    is_target=[True, False],
 )
 
 arr = np.frombuffer(kmers, dtype=KMER_DTYPE)
@@ -101,5 +105,5 @@ print(arr.shape, idx_to_id)
 
 ## Notes
 
-- Record IDs are emitted for every FASTA record in order, even when a record contributes no minimizers.
+- Record IDs are emitted for every FASTA record in order for each assembly, even when a record contributes no minimizers.
 - Minimizers are serialized record-by-record, preserving record and within-record minimizer order.

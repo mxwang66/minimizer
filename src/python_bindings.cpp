@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 namespace py = pybind11;
 
@@ -26,46 +27,58 @@ append_scalar(std::string& out, T value)
   out.append(bytes, sizeof(T));
 }
 
-std::tuple<std::string, py::tuple>
-indexlr_impl(const std::string& assembly_path,
+std::tuple<std::string, py::list>
+indexlr_impl(const std::vector<std::string>& assembly_paths,
              std::size_t kmerlen,
              std::size_t windowsize,
-             std::size_t assembly_idx,
-             bool is_target)
+             const std::vector<std::size_t>& assembly_indices,
+             const std::vector<bool>& is_targets)
 {
-  if (assembly_idx > std::numeric_limits<uint16_t>::max()) {
-    throw std::runtime_error("assembly_idx must fit in uint16");
+  if (assembly_paths.size() != assembly_indices.size() ||
+      assembly_paths.size() != is_targets.size()) {
+    throw std::runtime_error(
+      "assembly_path, assembly_idx, and is_target must have the same length");
   }
-
-  const auto records = btllib::read_fasta(assembly_path);
-  py::tuple idx_to_id(records.size());
 
   std::string kmers;
-  kmers.reserve(records.size() * 17);
+  py::list all_idx_to_id;
 
-  for (std::size_t record_idx = 0; record_idx < records.size(); ++record_idx) {
-    if (record_idx > std::numeric_limits<uint16_t>::max()) {
-      throw std::runtime_error("record_idx must fit in uint16");
+  for (std::size_t assembly_i = 0; assembly_i < assembly_paths.size(); ++assembly_i) {
+    const auto assembly_idx = assembly_indices[assembly_i];
+    if (assembly_idx > std::numeric_limits<uint16_t>::max()) {
+      throw std::runtime_error("assembly_idx must fit in uint16");
     }
 
-    const auto& record = records[record_idx];
-    idx_to_id[record_idx] = py::str(record.id);
+    const auto records = btllib::read_fasta(assembly_paths[assembly_i]);
+    py::tuple idx_to_id(records.size());
+    kmers.reserve(kmers.size() + (records.size() * 17));
 
-    const auto mins = btllib::minimize_sequence(record.sequence, kmerlen, windowsize);
-    for (const auto& m : mins) {
-      if (m.pos > std::numeric_limits<uint32_t>::max()) {
-        throw std::runtime_error("minimizer position exceeds uint32 range");
+    for (std::size_t record_idx = 0; record_idx < records.size(); ++record_idx) {
+      if (record_idx > std::numeric_limits<uint16_t>::max()) {
+        throw std::runtime_error("record_idx must fit in uint16");
       }
 
-      append_scalar<uint64_t>(kmers, m.out_hash);
-      append_scalar<uint32_t>(kmers, static_cast<uint32_t>(m.pos));
-      append_scalar<uint16_t>(kmers, static_cast<uint16_t>(record_idx));
-      append_scalar<uint16_t>(kmers, static_cast<uint16_t>(assembly_idx));
-      append_scalar<uint8_t>(kmers, is_target ? uint8_t{1} : uint8_t{0});
+      const auto& record = records[record_idx];
+      idx_to_id[record_idx] = py::str(record.id);
+
+      const auto mins = btllib::minimize_sequence(record.sequence, kmerlen, windowsize);
+      for (const auto& m : mins) {
+        if (m.pos > std::numeric_limits<uint32_t>::max()) {
+          throw std::runtime_error("minimizer position exceeds uint32 range");
+        }
+
+        append_scalar<uint64_t>(kmers, m.out_hash);
+        append_scalar<uint32_t>(kmers, static_cast<uint32_t>(m.pos));
+        append_scalar<uint16_t>(kmers, static_cast<uint16_t>(record_idx));
+        append_scalar<uint16_t>(kmers, static_cast<uint16_t>(assembly_idx));
+        append_scalar<uint8_t>(kmers, is_targets[assembly_i] ? uint8_t{1} : uint8_t{0});
+      }
     }
+
+    all_idx_to_id.append(idx_to_id);
   }
 
-  return { kmers, idx_to_id };
+  return { kmers, all_idx_to_id };
 }
 
 } // namespace
@@ -75,13 +88,13 @@ PYBIND11_MODULE(_core, m)
   m.doc() = "Minimal btllib indexlr bindings";
 
   m.def("indexlr_native",
-        [](const std::string& assembly_path,
+        [](const std::vector<std::string>& assembly_paths,
            std::size_t kmerlen,
            std::size_t windowsize,
-           std::size_t assembly_idx,
-           bool is_target) {
+           const std::vector<std::size_t>& assembly_indices,
+           const std::vector<bool>& is_targets) {
           auto [kmers, ids] =
-            indexlr_impl(assembly_path, kmerlen, windowsize, assembly_idx, is_target);
+            indexlr_impl(assembly_paths, kmerlen, windowsize, assembly_indices, is_targets);
           return py::make_tuple(py::bytes(kmers), ids);
         },
         py::arg("assembly_path"),
