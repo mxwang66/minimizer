@@ -22,8 +22,8 @@ def indexlr(
 ) -> tuple[
     np.ndarray,
     list[tuple[str, ...]],
-    list[int],
-    list[int],
+    np.ndarray[np.uint64],
+    np.ndarray[np.uint64],
 ]:
     ...
 ```
@@ -43,9 +43,9 @@ assembly are computed and serialized exactly as before, and each assembly's byte
 to one shared output byte buffer in input order. The returned NumPy buffer is writable.
 
 The function also returns:
-- `record_offsets`: global minimizer indices where a new FASTA record starts contributing
+- `record_offsets` (`np.ndarray[np.uint64]`): global minimizer indices where a new FASTA record starts contributing
   minimizers (flattened across assemblies). Records with zero minimizers are omitted.
-- `assembly_offsets`: global minimizer indices where a new assembly starts contributing
+- `assembly_offsets` (`np.ndarray[np.uint64]`): global minimizer indices where a new assembly starts contributing
   minimizers. Assemblies with zero minimizers are omitted.
 
 ## Conda setup (recommended)
