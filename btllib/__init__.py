@@ -1,13 +1,46 @@
-from __future__ import annotations
+"""
+btllib
+======
 
-from os import PathLike
+Generate minimizer sketches, with code adopted from `btllib<https://github.com/bcgsc/btllib>`__. 
+
+Usage:
+------
+```python
+>>> from btllib import indexlr
+>>> kmers, record_ids, record_offsets, assembly_offsets = indexlr(
+>>>     assembly_paths=[Path('example1.fa'), Path('example2.fa.gz')], 
+>>>     kmerlen=21, 
+>>>     windowsize=200, 
+>>>     assembly_idx=[0, 1], 
+>>>     is_target=[True, False], 
+>>> )
+```
+
+Dependencies:
+-------------
+- numpy
+- zlib
+
+Functions:
+----------
+- indexlr
+
+Attributes:
+-----------
+- KMER_DTYPE (np.dtype)
+"""
+
+__license__ = 'GPL 3.0'
+
 from pathlib import Path
 from pkgutil import extend_path
+from collections.abc import Iterable
+
+__path__ = extend_path(__path__, __name__)
 
 import numpy as np
 from numpy.typing import NDArray
-
-__path__ = extend_path(__path__, __name__)
 
 from ._core import indexlr_native
 
@@ -21,33 +54,48 @@ KMER_DTYPE = np.dtype([
 
 
 def indexlr(
-    assembly_path: list[Path],
-    kmerlen: int,
-    windowsize: int,
-    assembly_idx: list[int],
-    is_target: list[bool],
+    assembly_paths: Iterable[Path],  
+    kmerlen: int, 
+    windowsize: int, 
+    assembly_idx: Iterable[int], 
+    is_target: Iterable[bool]
 ) -> tuple[
-    NDArray[np.uint8],
-    list[tuple[str, ...]],
-    NDArray[np.uint64],
-    NDArray[np.uint64],
+    NDArray[np.void], 
+    list[tuple[str, ...]], 
+    NDArray[np.uint64], 
+    NDArray[np.uint64]
 ]:
-    """Compute minimizers for all FASTA records in each assembly in order."""
+    """Compute minimizers for all FASTA records in each assembly in order. 
+    `assembly_paths`, `assembly_idx`, and `is_target` are parallel lists. 
 
-    if len(assembly_path) != len(assembly_idx) or len(assembly_path) != len(is_target):
-        raise ValueError("assembly_path, assembly_idx, and is_target must have the same length")
+    Args:
+        assembly_paths (Iterable[Path]): Path to each assembly file in FASTA format (gzip supported). 
+        kmerlen (int): k-mer length. 
+        windowsize (int): Window size for minimizer sketch. 
+        assembly_idx (Iterable[int]): Index of each assembly. 
+        is_target (Iterable[bool]): True for target assemblies. 
 
-    path_strs = [
-        str(Path(path)) if isinstance(path, PathLike) else str(path) for path in assembly_path
-    ]
+    Returns:
+        tuple: A tuple containing
+            1. NDArray[np.void]: A 1-D Numpy structured array of k-mers from all assemblies, with dtype `KMER_DTYPE`. 
+                Each element represents a minimizer, with fields, 
+                - 'hash' (uint64): Hash value of the minimizer. 
+                - 'pos' (uint32): Position of the first base of the minimizer. 
+                - 'record_idx' (uint16): 0-based index of the sequence records, in the same order as they appear in the FASTA file. 
+                - 'assembly_idx' (uint16): Assembly index. 
+                - 'is_target' (bool): True for target assemblies. 
+            2. list[tuple[str, ...]]: FASTA record IDs of each assembly. 
+            3. NDArray[np.uint64]: Global minimizer indices where a new FASTA record starts contributing minimizers. 
+            4. NDArray[np.uint64]: Global minimizer indices where a new assembly starts contributing minimizers. 
+    """
     kmers, idx_to_id, record_offsets, assembly_offsets = indexlr_native(
-        path_strs,
-        int(kmerlen),
-        int(windowsize),
-        [int(idx) for idx in assembly_idx],
-        [bool(target) for target in is_target],
+        list(str(p) for p in assembly_paths), 
+        int(kmerlen), 
+        int(windowsize), 
+        list(int(idx) for idx in assembly_idx), 
+        list(bool(target) for target in is_target)
     )
-    return kmers.view(KMER_DTYPE), [tuple(ids) for ids in idx_to_id], record_offsets, assembly_offsets
+    return kmers.view(KMER_DTYPE), list(tuple(ids) for ids in idx_to_id), record_offsets, assembly_offsets
 
 
-__all__ = ["indexlr"]
+__all__ = ['indexlr']

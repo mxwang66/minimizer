@@ -63,7 +63,7 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
   if (assembly_paths.size() != assembly_indices.size() ||
       assembly_paths.size() != is_targets.size()) {
     throw std::runtime_error(
-      "assembly_path, assembly_idx, and is_target must have the same length");
+      "assembly_paths, assembly_idx, and is_target must have the same length");
   }
 
   std::vector<std::uint8_t> kmers;
@@ -84,7 +84,7 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
     py::tuple idx_to_id(records.size());
     std::size_t estimated_minimizer_count = 0;
     for (const auto& record : records) {
-      estimated_minimizer_count += (2 * record.sequence.size()) / (windowsize + 1);
+      estimated_minimizer_count += (3 * record.sequence.size()) / (windowsize + 1);
     }
     kmers.reserve(kmers.size() + (estimated_minimizer_count * serialized_record_size));
     bool assembly_has_minimizers = false;
@@ -147,7 +147,7 @@ PYBIND11_MODULE(_core, m)
                                 make_array(std::move(record_offsets)),
                                 make_array(std::move(assembly_offsets)));
         },
-        py::arg("assembly_path"),
+        py::arg("assembly_paths"),
         py::arg("kmerlen"),
         py::arg("windowsize"),
         py::arg("assembly_idx"),
