@@ -17,6 +17,8 @@ namespace py = pybind11;
 
 namespace {
 
+constexpr std::size_t serialized_record_size = 17;
+
 void
 append_record(std::vector<std::uint8_t>& out,
               std::uint64_t out_hash,
@@ -25,9 +27,8 @@ append_record(std::vector<std::uint8_t>& out,
               std::uint16_t assembly_idx,
               std::uint8_t is_target)
 {
-  constexpr std::size_t record_size = 17;
   const auto old_size = out.size();
-  out.resize(old_size + record_size);
+  out.resize(old_size + serialized_record_size);
   auto* record = out.data() + old_size;
 
   std::memcpy(record + 0, &out_hash, sizeof(out_hash));
@@ -37,7 +38,22 @@ append_record(std::vector<std::uint8_t>& out,
   std::memcpy(record + 16, &is_target, sizeof(is_target));
 }
 
-std::tuple<std::vector<std::uint8_t>, py::list, std::vector<std::size_t>, std::vector<std::size_t>>
+template<typename T>
+py::array_t<T>
+make_array(std::vector<T>&& values)
+{
+  auto* owner = new std::vector<T>(std::move(values));
+  py::capsule capsule(owner, [](void* ptr) {
+    delete static_cast<std::vector<T>*>(ptr);
+  });
+  return py::array_t<T>(
+    { static_cast<py::ssize_t>(owner->size()) },
+    { static_cast<py::ssize_t>(sizeof(T)) },
+    owner->data(),
+    capsule);
+}
+
+std::tuple<std::vector<std::uint8_t>, py::list, std::vector<std::uint64_t>, std::vector<std::uint64_t>>
 indexlr_impl(const std::vector<std::string>& assembly_paths,
              std::size_t kmerlen,
              std::size_t windowsize,
@@ -52,9 +68,9 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
 
   std::vector<std::uint8_t> kmers;
   py::list all_idx_to_id;
-  std::vector<std::size_t> record_offsets;
-  std::vector<std::size_t> assembly_offsets;
-  std::size_t global_minimizer_idx = 0;
+  std::vector<std::uint64_t> record_offsets;
+  std::vector<std::uint64_t> assembly_offsets;
+  std::uint64_t global_minimizer_idx = 0;
 
   for (std::size_t assembly_i = 0; assembly_i < assembly_paths.size(); ++assembly_i) {
     const auto assembly_idx = assembly_indices[assembly_i];
@@ -66,7 +82,11 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
 
     const auto records = btllib::read_fasta(assembly_paths[assembly_i]);
     py::tuple idx_to_id(records.size());
-    kmers.reserve(kmers.size() + (records.size() * 17));
+    std::size_t estimated_minimizer_count = 0;
+    for (const auto& record : records) {
+      estimated_minimizer_count += (2 * record.sequence.size()) / (windowsize + 1);
+    }
+    kmers.reserve(kmers.size() + (estimated_minimizer_count * serialized_record_size));
     bool assembly_has_minimizers = false;
 
     for (std::size_t record_idx = 0; record_idx < records.size(); ++record_idx) {
@@ -122,18 +142,10 @@ PYBIND11_MODULE(_core, m)
           auto [kmers, ids, record_offsets, assembly_offsets] =
             indexlr_impl(assembly_paths, kmerlen, windowsize, assembly_indices, is_targets);
 
-          auto* kmers_owner = new std::vector<std::uint8_t>(std::move(kmers));
-          py::capsule kmers_capsule(kmers_owner, [](void* ptr) {
-            delete static_cast<std::vector<std::uint8_t>*>(ptr);
-          });
-          py::array_t<std::uint8_t> kmers_array(
-            { static_cast<py::ssize_t>(kmers_owner->size()) },
-            { static_cast<py::ssize_t>(1) },
-            kmers_owner->data(),
-            kmers_capsule);
-
-          return py::make_tuple(
-            kmers_array, ids, py::cast(record_offsets), py::cast(assembly_offsets));
+          return py::make_tuple(make_array(std::move(kmers)),
+                                ids,
+                                make_array(std::move(record_offsets)),
+                                make_array(std::move(assembly_offsets)));
         },
         py::arg("assembly_path"),
         py::arg("kmerlen"),

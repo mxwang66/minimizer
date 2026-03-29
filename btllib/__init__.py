@@ -29,8 +29,8 @@ def indexlr(
 ) -> tuple[
     NDArray[np.uint8],
     list[tuple[str, ...]],
-    list[int],
-    list[int],
+    NDArray[np.uint64],
+    NDArray[np.uint64],
 ]:
     """Compute minimizers for all FASTA records in each assembly in order."""
 
@@ -47,7 +47,7 @@ def indexlr(
         [int(idx) for idx in assembly_idx],
         [bool(target) for target in is_target],
     )
-    return kmers.view(KMER_DTYPE), [tuple(ids) for ids in idx_to_id], list(record_offsets), list(assembly_offsets)
+    return kmers.view(KMER_DTYPE), [tuple(ids) for ids in idx_to_id], record_offsets, assembly_offsets
 
 
 __all__ = ["indexlr"]
