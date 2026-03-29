@@ -2,6 +2,7 @@
 
 #include "nthash.hpp"
 
+#include <functional>
 #include <limits>
 #include <string>
 #include <vector>
@@ -18,7 +19,7 @@ calc_minimizer(const std::vector<Minimizer>& hashed_kmers_buffer,
                ssize_t& min_idx_right,
                ssize_t& min_pos_prev,
                const std::size_t w,
-               std::vector<Minimizer>& minimizers)
+               const std::function<void(const Minimizer&)>& emit)
 {
   min_idx_left = ssize_t(idx + 1 - w);
   min_idx_right = ssize_t(idx + 1);
@@ -43,21 +44,21 @@ calc_minimizer(const std::vector<Minimizer>& hashed_kmers_buffer,
   if (ssize_t(min_current->pos) > min_pos_prev &&
       min_current->min_hash != std::numeric_limits<uint64_t>::max()) {
     min_pos_prev = ssize_t(min_current->pos);
-    minimizers.push_back(*min_current);
+    emit(*min_current);
   }
 }
 
 } // namespace
 
-std::vector<Minimizer>
-minimize_sequence(const std::string& seq, std::size_t k, std::size_t w)
+void
+minimize_sequence(const std::string& seq,
+                  std::size_t k,
+                  std::size_t w,
+                  const std::function<void(const Minimizer&)>& emit)
 {
   if ((k > seq.size()) || (w > seq.size() - k + 1)) {
-    return {};
+    return;
   }
-
-  std::vector<Minimizer> minimizers;
-  minimizers.reserve(2 * (seq.size() - k + 1) / w);
 
   std::vector<Minimizer> hashed_kmers_buffer(w + 1);
   ssize_t min_idx_left = -1;
@@ -81,11 +82,9 @@ minimize_sequence(const std::string& seq, std::size_t k, std::size_t w)
                      min_idx_right,
                      min_pos_prev,
                      w,
-                     minimizers);
+                     emit);
     }
   }
-
-  return minimizers;
 }
 
 } // namespace btllib

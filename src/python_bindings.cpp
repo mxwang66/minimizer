@@ -98,15 +98,17 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
       const auto& record = records[record_idx];
       idx_to_id[record_idx] = py::str(record.id);
 
-      const auto mins = btllib::minimize_sequence(record.sequence, kmerlen, windowsize);
-      if (!mins.empty()) {
+      bool record_has_minimizers = false;
+      btllib::minimize_sequence(record.sequence, kmerlen, windowsize, [&](const btllib::Minimizer& m) {
         if (!assembly_has_minimizers) {
           assembly_offsets.push_back(global_minimizer_idx);
           assembly_has_minimizers = true;
         }
-        record_offsets.push_back(global_minimizer_idx);
-      }
-      for (const auto& m : mins) {
+        if (!record_has_minimizers) {
+          record_offsets.push_back(global_minimizer_idx);
+          record_has_minimizers = true;
+        }
+
         if (m.pos > std::numeric_limits<uint32_t>::max()) {
           throw std::runtime_error("minimizer position exceeds uint32 range");
         }
@@ -118,7 +120,7 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
                       assembly_idx16,
                       is_target_u8);
         ++global_minimizer_idx;
-      }
+      });
     }
 
     all_idx_to_id.append(idx_to_id);

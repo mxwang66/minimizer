@@ -2,8 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
-#include <vector>
 
 namespace btllib {
 
@@ -15,7 +15,10 @@ struct Minimizer
   bool forward = false;
 };
 
-std::vector<Minimizer>
-minimize_sequence(const std::string& seq, std::size_t k, std::size_t w);
+void
+minimize_sequence(const std::string& seq,
+                  std::size_t k,
+                  std::size_t w,
+                  const std::function<void(const Minimizer&)>& emit);
 
 } // namespace btllib
