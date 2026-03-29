@@ -7,27 +7,37 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
-#include <type_traits>
 #include <vector>
 
 #include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
 #include <pybind11/stl.h>
 
 namespace py = pybind11;
 
 namespace {
 
-template<typename T>
 void
-append_scalar(std::string& out, T value)
+append_record(std::vector<std::uint8_t>& out,
+              std::uint64_t out_hash,
+              std::uint32_t pos,
+              std::uint16_t record_idx,
+              std::uint16_t assembly_idx,
+              std::uint8_t is_target)
 {
-  static_assert(std::is_trivially_copyable_v<T>);
-  char bytes[sizeof(T)];
-  std::memcpy(bytes, &value, sizeof(T));
-  out.append(bytes, sizeof(T));
+  constexpr std::size_t record_size = 17;
+  const auto old_size = out.size();
+  out.resize(old_size + record_size);
+  auto* record = out.data() + old_size;
+
+  std::memcpy(record + 0, &out_hash, sizeof(out_hash));
+  std::memcpy(record + 8, &pos, sizeof(pos));
+  std::memcpy(record + 12, &record_idx, sizeof(record_idx));
+  std::memcpy(record + 14, &assembly_idx, sizeof(assembly_idx));
+  std::memcpy(record + 16, &is_target, sizeof(is_target));
 }
 
-std::tuple<std::string, py::list, std::vector<std::size_t>, std::vector<std::size_t>>
+std::tuple<std::vector<std::uint8_t>, py::list, std::vector<std::size_t>, std::vector<std::size_t>>
 indexlr_impl(const std::vector<std::string>& assembly_paths,
              std::size_t kmerlen,
              std::size_t windowsize,
@@ -40,7 +50,7 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
       "assembly_path, assembly_idx, and is_target must have the same length");
   }
 
-  std::string kmers;
+  std::vector<std::uint8_t> kmers;
   py::list all_idx_to_id;
   std::vector<std::size_t> record_offsets;
   std::vector<std::size_t> assembly_offsets;
@@ -51,6 +61,8 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
     if (assembly_idx > std::numeric_limits<uint16_t>::max()) {
       throw std::runtime_error("assembly_idx must fit in uint16");
     }
+    const auto assembly_idx16 = static_cast<std::uint16_t>(assembly_idx);
+    const std::uint8_t is_target_u8 = is_targets[assembly_i] ? std::uint8_t{1} : std::uint8_t{0};
 
     const auto records = btllib::read_fasta(assembly_paths[assembly_i]);
     py::tuple idx_to_id(records.size());
@@ -61,6 +73,7 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
       if (record_idx > std::numeric_limits<uint16_t>::max()) {
         throw std::runtime_error("record_idx must fit in uint16");
       }
+      const auto record_idx16 = static_cast<std::uint16_t>(record_idx);
 
       const auto& record = records[record_idx];
       idx_to_id[record_idx] = py::str(record.id);
@@ -78,11 +91,12 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
           throw std::runtime_error("minimizer position exceeds uint32 range");
         }
 
-        append_scalar<uint64_t>(kmers, m.out_hash);
-        append_scalar<uint32_t>(kmers, static_cast<uint32_t>(m.pos));
-        append_scalar<uint16_t>(kmers, static_cast<uint16_t>(record_idx));
-        append_scalar<uint16_t>(kmers, static_cast<uint16_t>(assembly_idx));
-        append_scalar<uint8_t>(kmers, is_targets[assembly_i] ? uint8_t{1} : uint8_t{0});
+        append_record(kmers,
+                      m.out_hash,
+                      static_cast<std::uint32_t>(m.pos),
+                      record_idx16,
+                      assembly_idx16,
+                      is_target_u8);
         ++global_minimizer_idx;
       }
     }
@@ -107,8 +121,19 @@ PYBIND11_MODULE(_core, m)
            const std::vector<bool>& is_targets) {
           auto [kmers, ids, record_offsets, assembly_offsets] =
             indexlr_impl(assembly_paths, kmerlen, windowsize, assembly_indices, is_targets);
+
+          auto* kmers_owner = new std::vector<std::uint8_t>(std::move(kmers));
+          py::capsule kmers_capsule(kmers_owner, [](void* ptr) {
+            delete static_cast<std::vector<std::uint8_t>*>(ptr);
+          });
+          py::array_t<std::uint8_t> kmers_array(
+            { static_cast<py::ssize_t>(kmers_owner->size()) },
+            { static_cast<py::ssize_t>(1) },
+            kmers_owner->data(),
+            kmers_capsule);
+
           return py::make_tuple(
-            py::bytes(kmers), ids, py::cast(record_offsets), py::cast(assembly_offsets));
+            kmers_array, ids, py::cast(record_offsets), py::cast(assembly_offsets));
         },
         py::arg("assembly_path"),
         py::arg("kmerlen"),

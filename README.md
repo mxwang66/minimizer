@@ -20,7 +20,7 @@ def indexlr(
     assembly_idx: list[int],
     is_target: list[bool],
 ) -> tuple[
-    bytes,
+    np.ndarray,
     list[tuple[str, ...]],
     list[int],
     list[int],
@@ -28,7 +28,7 @@ def indexlr(
     ...
 ```
 
-The returned `bytes` buffer is laid out as records of:
+The returned `numpy.ndarray` (dtype `uint8`) buffer is laid out as records of:
 
 - `hash` (`uint64`)
 - `pos` (`uint32`)
@@ -40,7 +40,7 @@ in exactly that order, with no struct padding.
 
 `assembly_path`, `assembly_idx`, and `is_target` are parallel lists. Minimizers for each
 assembly are computed and serialized exactly as before, and each assembly's bytes are appended
-to one shared output bytestring in input order.
+to one shared output byte buffer in input order. The returned NumPy buffer is writable.
 
 The function also returns:
 - `record_offsets`: global minimizer indices where a new FASTA record starts contributing
@@ -102,7 +102,7 @@ KMER_DTYPE = np.dtype([
     ("is_target", np.bool_),
 ])
 
-kmers, idx_to_id, record_offsets, assembly_offsets = indexlr(
+kmers_u8, idx_to_id, record_offsets, assembly_offsets = indexlr(
     assembly_path=[Path("example.fa.gz"), Path("example2.fa.gz")],
     kmerlen=31,
     windowsize=10,
@@ -110,7 +110,7 @@ kmers, idx_to_id, record_offsets, assembly_offsets = indexlr(
     is_target=[True, False],
 )
 
-arr = np.frombuffer(kmers, dtype=KMER_DTYPE)
+arr = kmers_u8.view(KMER_DTYPE)
 print(arr.shape, idx_to_id, record_offsets, assembly_offsets)
 ```
 
