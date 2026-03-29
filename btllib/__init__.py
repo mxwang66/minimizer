@@ -4,6 +4,8 @@ from os import PathLike
 from pathlib import Path
 from pkgutil import extend_path
 
+import numpy as np
+
 __path__ = extend_path(__path__, __name__)
 
 from ._core import indexlr_native
@@ -16,7 +18,7 @@ def indexlr(
     assembly_idx: list[int],
     is_target: list[bool],
 ) -> tuple[
-    bytes,
+    np.ndarray,
     list[tuple[str, ...]],
     list[int],
     list[int],
