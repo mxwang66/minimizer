@@ -119,3 +119,4 @@ print(arr.shape, idx_to_id, record_offsets, assembly_offsets)
 - Record IDs are emitted for every FASTA record in order for each assembly, even when a record contributes no minimizers.
 - Minimizers are serialized record-by-record, preserving record and within-record minimizer order.
 - `record_offsets` and `assembly_offsets` are minimizer-index offsets (not byte offsets). Byte offset can be computed as `offset * 17`.
+- The native `indexlr` compute path releases the Python GIL, so concurrent Python threads can call `btllib.indexlr(...)` at the same time.
