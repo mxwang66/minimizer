@@ -70,6 +70,7 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
   }
 
   std::vector<std::uint8_t> kmers;
+  kmers.reserve(btllib::est_kmer_number(assembly_paths, windowsize) * serialized_record_size);
   std::vector<std::vector<std::string>> all_idx_to_id;
   all_idx_to_id.reserve(assembly_paths.size());
   std::vector<std::uint64_t> record_offsets;
@@ -87,11 +88,6 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
     const auto records = btllib::read_fasta(assembly_paths[assembly_i]);
     auto& idx_to_id = all_idx_to_id.emplace_back();
     idx_to_id.reserve(records.size());
-    std::size_t estimated_minimizer_count = 0;
-    for (const auto& record : records) {
-      estimated_minimizer_count += (3 * record.sequence.size()) / (windowsize + 1);
-    }
-    kmers.reserve(kmers.size() + (estimated_minimizer_count * serialized_record_size));
     bool assembly_has_minimizers = false;
 
     for (std::size_t record_idx = 0; record_idx < records.size(); ++record_idx) {
