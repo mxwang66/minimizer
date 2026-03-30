@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <deque>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -14,6 +15,9 @@
 
 namespace btllib {
 namespace {
+
+constexpr double plain_fasta_seq_len_per_byte = 1.0;
+constexpr double gz_fasta_seq_len_per_byte = 4.0;
 
 bool
 ends_with(std::string_view text, std::string_view suffix)
@@ -180,6 +184,32 @@ read_fasta(const std::string& assembly_path)
     return read_gz_fasta(assembly_path);
   }
   return read_plain_fasta(assembly_path);
+}
+
+std::size_t
+est_seq_len(const std::string& assembly_path)
+{
+  const double seq_len_per_byte =
+    ends_with(assembly_path, ".gz") ? gz_fasta_seq_len_per_byte : plain_fasta_seq_len_per_byte;
+
+  std::error_code ec;
+  const auto file_bytes = std::filesystem::file_size(assembly_path, ec);
+  if (ec) {
+    return 0;
+  }
+  return static_cast<std::size_t>(static_cast<double>(file_bytes) * seq_len_per_byte);
+}
+
+std::size_t
+est_kmer_bytes(const std::vector<std::string>& assembly_paths, std::size_t windowsize)
+{
+  // Reserve-only heuristic, not correctness-critical.
+  std::size_t est_total_seq_len = 0;
+  for (const auto& assembly_path : assembly_paths) {
+    est_total_seq_len += est_seq_len(assembly_path);
+  }
+  const auto est_min_count = (2 * est_total_seq_len) / (windowsize + 1);
+  return est_min_count * 17;
 }
 
 } // namespace btllib

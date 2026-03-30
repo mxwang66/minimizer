@@ -2,11 +2,9 @@
 #include "minimizer.hpp"
 
 #include <cstdint>
-#include <filesystem>
 #include <limits>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <tuple>
 #include <vector>
 
@@ -17,73 +15,6 @@
 namespace py = pybind11;
 
 namespace {
-
-constexpr std::size_t serialized_record_size = 17;
-constexpr double plain_fasta_seq_len_per_byte = 0.8;
-constexpr double gz_fasta_seq_len_per_byte = 3.5;
-
-bool
-ends_with(std::string_view text, std::string_view suffix)
-{
-  return text.size() >= suffix.size() &&
-         text.substr(text.size() - suffix.size()) == suffix;
-}
-
-std::size_t
-estimate_sequence_length_from_file_size(const std::string& assembly_path)
-{
-  // Reserve sizing heuristic:
-  // - plain FASTA has sequence plus headers/newlines, so sequence length is usually
-  //   somewhat smaller than on-disk bytes.
-  // - gz FASTA stores compressed bytes, so sequence length is usually several times
-  //   larger than the compressed file size.
-  const double seq_len_per_byte =
-    ends_with(assembly_path, ".gz") ? gz_fasta_seq_len_per_byte : plain_fasta_seq_len_per_byte;
-
-  std::error_code ec;
-  const auto file_bytes = std::filesystem::file_size(assembly_path, ec);
-  if (ec) {
-    throw std::runtime_error("Unable to determine file size for FASTA: " + assembly_path +
-                             " (" + ec.message() + ")");
-  }
-
-  const long double estimate =
-    static_cast<long double>(file_bytes) * static_cast<long double>(seq_len_per_byte);
-  if (estimate > static_cast<long double>(std::numeric_limits<std::size_t>::max())) {
-    throw std::runtime_error("Estimated sequence length overflows size_t for FASTA: " +
-                             assembly_path);
-  }
-
-  return static_cast<std::size_t>(estimate);
-}
-
-std::size_t
-estimate_total_kmer_bytes(const std::vector<std::string>& assembly_paths, std::size_t windowsize)
-{
-  // This is a reserve-only heuristic and does not affect correctness.
-  std::size_t estimated_total_sequence_length = 0;
-  for (const auto& assembly_path : assembly_paths) {
-    const auto estimate = estimate_sequence_length_from_file_size(assembly_path);
-    if (estimate > std::numeric_limits<std::size_t>::max() - estimated_total_sequence_length) {
-      throw std::runtime_error("Estimated total sequence length overflows size_t");
-    }
-    estimated_total_sequence_length += estimate;
-  }
-
-  if (windowsize == std::numeric_limits<std::size_t>::max()) {
-    return 0;
-  }
-
-  const auto denominator = windowsize + 1;
-  if (estimated_total_sequence_length > std::numeric_limits<std::size_t>::max() / 2) {
-    throw std::runtime_error("Estimated minimizer count overflows size_t");
-  }
-  const auto estimated_minimizer_count = (2 * estimated_total_sequence_length) / denominator;
-  if (estimated_minimizer_count > std::numeric_limits<std::size_t>::max() / serialized_record_size) {
-    throw std::runtime_error("Estimated kmer byte size overflows size_t");
-  }
-  return estimated_minimizer_count * serialized_record_size;
-}
 
 template<typename T>
 py::array_t<T>
@@ -117,7 +48,7 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
   }
 
   std::vector<std::uint8_t> kmers;
-  kmers.reserve(estimate_total_kmer_bytes(assembly_paths, windowsize));
+  kmers.reserve(btllib::est_kmer_bytes(assembly_paths, windowsize));
   std::vector<std::vector<std::string>> all_idx_to_id;
   all_idx_to_id.reserve(assembly_paths.size());
   std::vector<std::uint64_t> record_offsets;
