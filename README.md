@@ -38,9 +38,10 @@ The returned `numpy.ndarray` (dtype `uint8`) buffer is laid out as records of:
 
 in exactly that order, with no struct padding.
 
-`assembly_path`, `assembly_idx`, and `is_target` are parallel lists. Minimizers for each
-assembly are computed and serialized exactly as before, and each assembly's bytes are appended
-to one shared output byte buffer in input order. The returned NumPy buffer is writable.
+`assembly_path`, `assembly_idx`, and `is_target` are parallel lists. Each FASTA record is
+minimized and serialized directly in native code into 17-byte records (without an intermediate
+`std::vector<Minimizer>` materialization), and each assembly's bytes are appended to one shared
+output byte buffer in input order. The returned NumPy buffer is writable.
 
 The function also returns:
 - `record_offsets` (`np.ndarray[np.uint64]`): global minimizer indices where a new FASTA record starts contributing

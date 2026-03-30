@@ -2,7 +2,6 @@
 #include "minimizer.hpp"
 
 #include <cstdint>
-#include <cstring>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -18,25 +17,6 @@ namespace py = pybind11;
 namespace {
 
 constexpr std::size_t serialized_record_size = 17;
-
-void
-append_record(std::vector<std::uint8_t>& out,
-              std::uint64_t out_hash,
-              std::uint32_t pos,
-              std::uint16_t record_idx,
-              std::uint16_t assembly_idx,
-              std::uint8_t is_target)
-{
-  const auto old_size = out.size();
-  out.resize(old_size + serialized_record_size);
-  auto* record = out.data() + old_size;
-
-  std::memcpy(record + 0, &out_hash, sizeof(out_hash));
-  std::memcpy(record + 8, &pos, sizeof(pos));
-  std::memcpy(record + 12, &record_idx, sizeof(record_idx));
-  std::memcpy(record + 14, &assembly_idx, sizeof(assembly_idx));
-  std::memcpy(record + 16, &is_target, sizeof(is_target));
-}
 
 template<typename T>
 py::array_t<T>
@@ -103,26 +83,18 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
       const auto& record = records[record_idx];
       idx_to_id.push_back(record.id);
 
-      const auto mins = btllib::minimize_sequence(record.sequence, kmerlen, windowsize);
-      if (!mins.empty()) {
+      auto serialized = btllib::minimize_sequence(
+        record.sequence, kmerlen, windowsize, record_idx16, assembly_idx16, is_target_u8);
+      if (serialized.count > 0) {
         if (!assembly_has_minimizers) {
           assembly_offsets.push_back(global_minimizer_idx);
           assembly_has_minimizers = true;
         }
         record_offsets.push_back(global_minimizer_idx);
-      }
-      for (const auto& m : mins) {
-        if (m.pos > std::numeric_limits<uint32_t>::max()) {
-          throw std::runtime_error("minimizer position exceeds uint32 range");
-        }
-
-        append_record(kmers,
-                      m.out_hash,
-                      static_cast<std::uint32_t>(m.pos),
-                      record_idx16,
-                      assembly_idx16,
-                      is_target_u8);
-        ++global_minimizer_idx;
+        kmers.insert(kmers.end(),
+                     std::make_move_iterator(serialized.bytes.begin()),
+                     std::make_move_iterator(serialized.bytes.end()));
+        global_minimizer_idx += serialized.count;
       }
     }
   }

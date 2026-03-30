@@ -7,15 +7,18 @@
 
 namespace btllib {
 
-struct Minimizer
+struct SerializedMinimizers
 {
-  uint64_t min_hash = 0;
-  uint64_t out_hash = 0;
-  std::size_t pos = 0;
-  bool forward = false;
+  std::vector<std::uint8_t> bytes;
+  std::size_t count = 0;
 };
 
-std::vector<Minimizer>
-minimize_sequence(const std::string& seq, std::size_t k, std::size_t w);
+SerializedMinimizers
+minimize_sequence(const std::string& seq,
+                  std::size_t k,
+                  std::size_t w,
+                  std::uint16_t record_idx,
+                  std::uint16_t assembly_idx,
+                  std::uint8_t is_target);
 
 } // namespace btllib
