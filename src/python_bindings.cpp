@@ -53,7 +53,10 @@ make_array(std::vector<T>&& values)
     capsule);
 }
 
-std::tuple<std::vector<std::uint8_t>, py::list, std::vector<std::uint64_t>, std::vector<std::uint64_t>>
+std::tuple<std::vector<std::uint8_t>,
+           std::vector<std::vector<std::string>>,
+           std::vector<std::uint64_t>,
+           std::vector<std::uint64_t>>
 indexlr_impl(const std::vector<std::string>& assembly_paths,
              std::size_t kmerlen,
              std::size_t windowsize,
@@ -67,7 +70,8 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
   }
 
   std::vector<std::uint8_t> kmers;
-  py::list all_idx_to_id;
+  std::vector<std::vector<std::string>> all_idx_to_id;
+  all_idx_to_id.reserve(assembly_paths.size());
   std::vector<std::uint64_t> record_offsets;
   std::vector<std::uint64_t> assembly_offsets;
   std::uint64_t global_minimizer_idx = 0;
@@ -81,7 +85,8 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
     const std::uint8_t is_target_u8 = is_targets[assembly_i] ? std::uint8_t{1} : std::uint8_t{0};
 
     const auto records = btllib::read_fasta(assembly_paths[assembly_i]);
-    py::tuple idx_to_id(records.size());
+    auto& idx_to_id = all_idx_to_id.emplace_back();
+    idx_to_id.reserve(records.size());
     std::size_t estimated_minimizer_count = 0;
     for (const auto& record : records) {
       estimated_minimizer_count += (3 * record.sequence.size()) / (windowsize + 1);
@@ -96,7 +101,7 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
       const auto record_idx16 = static_cast<std::uint16_t>(record_idx);
 
       const auto& record = records[record_idx];
-      idx_to_id[record_idx] = py::str(record.id);
+      idx_to_id.push_back(record.id);
 
       const auto mins = btllib::minimize_sequence(record.sequence, kmerlen, windowsize);
       if (!mins.empty()) {
@@ -120,11 +125,12 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
         ++global_minimizer_idx;
       }
     }
-
-    all_idx_to_id.append(idx_to_id);
   }
 
-  return { kmers, all_idx_to_id, record_offsets, assembly_offsets };
+  return { std::move(kmers),
+           std::move(all_idx_to_id),
+           std::move(record_offsets),
+           std::move(assembly_offsets) };
 }
 
 } // namespace
@@ -139,11 +145,23 @@ PYBIND11_MODULE(_core, m)
            std::size_t windowsize,
            const std::vector<std::size_t>& assembly_indices,
            const std::vector<bool>& is_targets) {
-          auto [kmers, ids, record_offsets, assembly_offsets] =
-            indexlr_impl(assembly_paths, kmerlen, windowsize, assembly_indices, is_targets);
+          auto [kmers, ids_by_assembly, record_offsets, assembly_offsets] = [&] {
+            py::gil_scoped_release release;
+            return indexlr_impl(
+              assembly_paths, kmerlen, windowsize, assembly_indices, is_targets);
+          }();
+
+          py::list all_idx_to_id;
+          for (const auto& ids : ids_by_assembly) {
+            py::tuple idx_to_id(ids.size());
+            for (std::size_t i = 0; i < ids.size(); ++i) {
+              idx_to_id[i] = ids[i];
+            }
+            all_idx_to_id.append(idx_to_id);
+          }
 
           return py::make_tuple(make_array(std::move(kmers)),
-                                ids,
+                                all_idx_to_id,
                                 make_array(std::move(record_offsets)),
                                 make_array(std::move(assembly_offsets)));
         },
