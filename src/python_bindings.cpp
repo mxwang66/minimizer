@@ -48,7 +48,7 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
   }
 
   std::vector<std::uint8_t> kmers;
-  kmers.reserve(btllib::est_kmer_bytes(assembly_paths, windowsize));
+  kmers.reserve(btllib::est_kmer_number(assembly_paths, windowsize) * btllib::serialized_record_size);
   std::vector<std::vector<std::string>> all_idx_to_id;
   all_idx_to_id.reserve(assembly_paths.size());
   std::vector<std::uint64_t> record_offsets;

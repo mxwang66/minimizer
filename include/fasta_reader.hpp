@@ -16,9 +16,6 @@ std::vector<FastaRecord>
 read_fasta(const std::string& assembly_path);
 
 std::size_t
-est_seq_len(const std::string& assembly_path);
-
-std::size_t
-est_kmer_bytes(const std::vector<std::string>& assembly_paths, std::size_t windowsize);
+est_kmer_number(const std::vector<std::string>& assembly_paths, std::size_t windowsize);
 
 } // namespace btllib

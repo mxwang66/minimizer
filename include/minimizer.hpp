@@ -7,6 +7,8 @@
 
 namespace btllib {
 
+inline constexpr std::size_t serialized_record_size = 17;
+
 struct SerializedMinimizers
 {
   std::vector<std::uint8_t> bytes;

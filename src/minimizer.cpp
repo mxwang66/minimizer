@@ -12,8 +12,6 @@ namespace btllib {
 
 namespace {
 
-constexpr std::size_t serialized_record_size = 17;
-
 struct Minimizer
 {
   std::uint64_t min_hash = 0;
