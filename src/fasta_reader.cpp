@@ -1,9 +1,9 @@
 #include "fasta_reader.hpp"
 
 #include <cctype>
-#include <deque>
 #include <filesystem>
 #include <fstream>
+#include <algorithm>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -35,6 +35,12 @@ extract_id(std::string_view header)
   return std::string(header.substr(0, id_end));
 }
 
+bool
+is_ascii_whitespace_only(std::string_view text)
+{
+  return text.find_first_not_of(" \t\n\r\f\v") == std::string_view::npos;
+}
+
 template<typename NextLine>
 std::vector<FastaRecord>
 read_fasta_core(NextLine&& next_line)
@@ -46,7 +52,11 @@ read_fasta_core(NextLine&& next_line)
   bool have_current = false;
 
   while (next_line(line)) {
-    if (line.empty()) {
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+
+    if (line.empty() || is_ascii_whitespace_only(line)) {
       continue;
     }
     if (line[0] == '>') {
@@ -70,7 +80,11 @@ read_fasta_core(NextLine&& next_line)
       continue;
     }
 
-    current.sequence.reserve(current.sequence.size() + line.size());
+    const std::size_t needed = current.sequence.size() + line.size();
+    if (needed > current.sequence.capacity()) {
+      const std::size_t grown = std::max(current.sequence.capacity() * 2, needed);
+      current.sequence.reserve(grown);
+    }
     for (char c : line) {
       if (!std::isspace(static_cast<unsigned char>(c))) {
         current.sequence.push_back(c);
@@ -120,11 +134,13 @@ read_gz_fasta(const std::string& assembly_path)
 
   constexpr int kBufSize = 1 << 16;
   std::string carry;
-  std::deque<std::string> ready_lines;
+  std::size_t line_start = 0;
+  std::size_t search_start = 0;
+  bool at_eof = false;
 
-  auto fill_lines = [&]() -> bool {
-    if (!ready_lines.empty()) {
-      return true;
+  auto fill_buffer = [&]() {
+    if (at_eof) {
+      return;
     }
 
     char buf[kBufSize];
@@ -134,48 +150,56 @@ read_gz_fasta(const std::string& assembly_path)
       const char* err = gzerror(reinterpret_cast<gzFile>(gz.get()), &errnum);
       throw std::runtime_error(std::string("gzip read error: ") + (err ? err : "unknown"));
     }
-
     if (bytes == 0) {
-      if (!carry.empty()) {
-        ready_lines.push_back(std::move(carry));
-        carry.clear();
-      }
-      return !ready_lines.empty();
+      at_eof = true;
+      return;
     }
-
     carry.append(buf, static_cast<std::size_t>(bytes));
-
-    std::size_t start = 0;
-    for (;;) {
-      std::size_t nl = carry.find('\n', start);
-      if (nl == std::string::npos) {
-        break;
-      }
-      std::string line = carry.substr(start, nl - start);
-      if (!line.empty() && line.back() == '\r') {
-        line.pop_back();
-      }
-      ready_lines.push_back(std::move(line));
-      start = nl + 1;
-    }
-
-    carry.erase(0, start);
-    return !ready_lines.empty() || bytes > 0;
   };
 
   auto records = read_fasta_core([&](std::string& line) -> bool {
-    while (ready_lines.empty()) {
-      if (!fill_lines()) {
+    for (;;) {
+      const std::size_t nl = carry.find('\n', search_start);
+      if (nl != std::string::npos) {
+        std::size_t end = nl;
+        if (end > line_start && carry[end - 1] == '\r') {
+          --end;
+        }
+        line.assign(carry.data() + line_start, end - line_start);
+        line_start = nl + 1;
+        search_start = line_start;
+
+        if (line_start > kBufSize && line_start >= carry.size() / 2) {
+          carry.erase(0, line_start);
+          search_start -= line_start;
+          line_start = 0;
+        }
+        return true;
+      }
+
+      search_start = carry.size();
+
+      if (at_eof) {
+        if (line_start < carry.size()) {
+          std::size_t end = carry.size();
+          if (end > line_start && carry[end - 1] == '\r') {
+            --end;
+          }
+          line.assign(carry.data() + line_start, end - line_start);
+          line_start = carry.size();
+          search_start = line_start;
+          return true;
+        }
         return false;
       }
-      if (ready_lines.empty() && gzeof(reinterpret_cast<gzFile>(gz.get())) != 0) {
-        return false;
+
+      fill_buffer();
+      if (line_start > kBufSize && line_start >= carry.size() / 2) {
+        carry.erase(0, line_start);
+        search_start -= line_start;
+        line_start = 0;
       }
     }
-
-    line = std::move(ready_lines.front());
-    ready_lines.pop_front();
-    return true;
   });
 
   return records;
