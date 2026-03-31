@@ -85,7 +85,7 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
     const auto assembly_idx16 = static_cast<std::uint16_t>(assembly_idx);
     const std::uint8_t is_target_u8 = is_targets[assembly_i] ? std::uint8_t{1} : std::uint8_t{0};
 
-    const auto records = btllib::read_fasta(assembly_paths[assembly_i]);
+    auto records = btllib::read_fasta(assembly_paths[assembly_i]);
     auto& idx_to_id = all_idx_to_id.emplace_back();
     idx_to_id.reserve(records.size());
     bool assembly_has_minimizers = false;
@@ -96,8 +96,8 @@ indexlr_impl(const std::vector<std::string>& assembly_paths,
       }
       const auto record_idx16 = static_cast<std::uint16_t>(record_idx);
 
-      const auto& record = records[record_idx];
-      idx_to_id.push_back(record.id);
+      auto& record = records[record_idx];
+      idx_to_id.push_back(std::move(record.id));
 
       const auto mins = btllib::minimize_sequence(record.sequence, kmerlen, windowsize);
       if (!mins.empty()) {
