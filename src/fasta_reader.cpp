@@ -5,7 +5,6 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -27,12 +26,13 @@ ends_with(std::string_view text, std::string_view suffix)
 }
 
 std::string
-extract_id(const std::string& header)
+extract_id(std::string_view header)
 {
-  std::istringstream iss(header);
-  std::string id;
-  iss >> id;
-  return id;
+  const std::size_t id_end = header.find_first_of(" \t\n\r\f\v");
+  if (id_end == std::string_view::npos) {
+    return std::string(header);
+  }
+  return std::string(header.substr(0, id_end));
 }
 
 template<typename NextLine>
@@ -62,6 +62,12 @@ read_fasta_core(NextLine&& next_line)
 
     if (!have_current) {
       throw std::runtime_error("Invalid FASTA: sequence encountered before header");
+    }
+
+    const auto first_ws = line.find_first_of(" \t\n\r\f\v");
+    if (first_ws == std::string::npos) {
+      current.sequence.append(line);
+      continue;
     }
 
     current.sequence.reserve(current.sequence.size() + line.size());
