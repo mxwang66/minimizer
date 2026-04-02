@@ -66,7 +66,7 @@ cmake --build build
 
 After build, the extension is created at:
 
-- `build/btllib/_core*.so`
+- `btllib/_core*.so`
 
 The Python wrapper package is in:
 
@@ -75,14 +75,14 @@ The Python wrapper package is in:
 Use either:
 
 ```bash
-export PYTHONPATH="$PWD:$PWD/build"
+export PYTHONPATH="$PWD"
 ```
 
 or in Python:
 
 ```python
 import sys
-sys.path[:0] = ["/path/to/repo", "/path/to/repo/build"]
+sys.path[:0] = ["/path/to/repo"]
 ```
 
 ## Minimal Python example

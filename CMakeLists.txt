@@ -33,5 +33,5 @@ target_compile_definitions(_core PRIVATE PYBIND11_DETAILED_ERROR_MESSAGES)
 
 set_target_properties(_core PROPERTIES
   PREFIX ""
-  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/btllib"
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/btllib"
 )
