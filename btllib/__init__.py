@@ -34,10 +34,7 @@ Attributes:
 __license__ = 'GPL 3.0'
 
 from pathlib import Path
-from pkgutil import extend_path
 from collections.abc import Iterable
-
-__path__ = extend_path(__path__, __name__)
 
 import numpy as np
 from numpy.typing import NDArray
